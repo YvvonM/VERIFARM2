@@ -1,0 +1,3 @@
+# MCP server dependency (needed to run app.mcp.server over stdio or SSE).
+#   pip install -r app/mcp/requirements.txt
+mcp[cli]>=1.2

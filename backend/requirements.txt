@@ -1,0 +1,50 @@
+# Backend dependencies (Milestones 2 & 3)
+fastapi>=0.110
+uvicorn>=0.29
+pydantic>=2.6
+python-dotenv>=1.0
+neo4j>=5.18
+
+# Milestone 2 — Loan Officer Copilot (supervisor + transparent ReAct loop).
+# LangChain is used only at the LLM/tool layer (ChatOpenAI + bind_tools +
+# with_structured_output) — NOT for orchestration; the ReAct loops are plain
+# Python. Featherless is OpenAI-compatible, so ChatOpenAI points straight at it.
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+openai>=1.30
+
+# Verification source (Sentinel-2 NDVI).
+earthengine-api
+Pillow
+pytesseract
+requests
+
+# Image preprocessing (optional but recommended)
+opencv-python-headless
+numpy
+pytest
+
+# API adapter pattern: async HTTP client for ERP/FMIS/registry polling.
+httpx>=0.27
+# Streaming ingestion: RabbitMQ consumer for IoT telemetry.
+aio-pika>=9.4
+# Redis: shared registry-lookup cache, durable telemetry dedup, event Pub/Sub.
+# All three backends are opt-in via env (REGISTRY_CACHE_BACKEND / STREAM_DEDUP_BACKEND
+# / EVENT_BACKEND = redis); the client is imported lazily, so it's inert until selected.
+redis>=5.0
+
+# Inbound connector: pooled async pull from external SQL registries (Postgres).
+sqlalchemy[asyncio]>=2.0
+asyncpg>=0.29
+# psycopg2 kept for the integration-test Postgres readiness check (testcontainers).
+psycopg2-binary>=2.9
+
+# MCP server (app/mcp) — exposes the gold layer to LLMs/agents (stdio + remote).
+mcp[cli]>=1.2
+pyjwt>=2.8
+
+# Dependency layering — what is NOT in this (runtime API) image, by design:
+#   - app/orchestration/requirements.txt : dagster (run in the orchestrator service)
+#   - app/bulk/requirements.txt          : pyspark, boto3, pyarrow (run on the worker/cluster)
+#   - requirements-dev.txt               : pytest-asyncio, testcontainers (CI/tests)
+#   - cli/pyproject.toml                 : typer, rich (the separate verifarms-cli package)

@@ -1,0 +1,30 @@
+# Keep the build context (and image) small and secret-free.
+
+# Secrets / local env — inject at runtime via --env-file or compose, never bake in.
+.env
+*.env
+
+# Python caches & local virtualenvs
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime output
+dlq/
+
+# Test fixtures not needed in the runtime image (large images)
+tests/ocr_images/
+
+# Service-account keys / credentials that may sit under app/
+*.json.key
+*service*key*.json
+
+# VCS / editor noise
+.git/
+.gitignore
+*.md

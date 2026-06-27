@@ -1,0 +1,45 @@
+/* VeriFarm theme — ported from the chris-frontend design.
+   Fonts (Anton display, Caveat accent, Inter body) + the dark-green
+   glassmorphism design tokens, adapted to Tailwind v3. */
+@import url("https://fonts.googleapis.com/css2?family=Anton&family=Caveat:wght@400;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #071410;
+  --foreground: #ffffff;
+  --card: rgba(255, 255, 255, 0.05);
+  --card-foreground: #ffffff;
+  --primary: #4ade80;
+  --primary-foreground: #071410;
+  --secondary: #f4a261;
+  --accent: #7c3aed;
+  --destructive: #f87171;
+  --muted-foreground: rgba(255, 255, 255, 0.5);
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.06);
+  --ring: #4ade80;
+}
+
+@layer base {
+  body {
+    background: linear-gradient(135deg, #071410 0%, #0b1f16 50%, #060d09 100%);
+    background-attachment: fixed;
+    color: var(--foreground);
+    font-family: "Inter", sans-serif;
+  }
+}
+
+/* Brand font utilities used by the ported design. */
+.font-display {
+  font-family: "Anton", sans-serif;
+}
+.font-accent {
+  font-family: "Caveat", cursive;
+}
+@theme {
+  --font-body: var(--font-body);
+  --font-heading: var(--font-heading);
+}

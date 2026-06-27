@@ -1,0 +1,30 @@
+{
+  "projectId": "774f5bf6-f8e5-46be-9320-b3636c4b425d",
+  "shape": "package",
+  "pkg": "verifarms-frontend",
+  "globalName": "VerifarmsUI",
+  "srcDir": "src/components",
+  "tsconfig": "tsconfig.json",
+  "cssEntry": ".design-sync-tw.css",
+  "componentSrcMap": {
+    "BarChartComponent": "src/components/genui/BarChartComponent.tsx",
+    "DataTable": "src/components/genui/DataTable.tsx",
+    "Insight": "src/components/genui/Insight.tsx",
+    "LoginPage": "src/components/auth/LoginPage.tsx",
+    "ImageWithFallback": "src/components/figma/ImageWithFallback.tsx",
+    "ComponentRegistry": null,
+    "Page": null,
+    "RootLayout": null
+  },
+  "dtsPropsFor": {
+    "BarChartComponent": "/** Row records to plot; each row contains xKey and yKey. */\n  data: Array<Record<string, unknown>>;\n  /** Key in each row used for the category axis. */\n  xKey: string;\n  /** Key in each row used for the value axis. */\n  yKey: string;",
+    "DataTable": "/** Ordered column headers. */\n  columns: string[];\n  /** Row values, each aligned positionally with `columns`. */\n  rows: Array<Array<unknown>>;\n  /** Optional human-readable description of the table. */\n  caption?: string | null;",
+    "Insight": "/** Plain-language answer for the loan officer. */\n  text: string;\n  /** Optional heading. */\n  title?: string | null;",
+    "LoginPage": "/** Called with the chosen role (\"officer\" | \"farmer\") on sign-in. */\n  onLogin: (role: string) => void;",
+    "ImageWithFallback": "/** Image source URL. */\n  src?: string;\n  /** Alternative text. */\n  alt?: string;\n  className?: string;\n  style?: React.CSSProperties;"
+  },
+  "overrides": {
+    "LoginPage": { "cardMode": "single", "viewport": "1200x760", "primaryStory": "SignIn" },
+    "DataTable": { "cardMode": "column" }
+  }
+}

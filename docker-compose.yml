@@ -1,0 +1,462 @@
+# Local VERIFARMS stack: Neo4j 5 (+APOC) and the FastAPI backend.
+#
+# Starts Neo4j with the APOC plugin and no authentication (local dev only), then
+# builds and runs the backend against it.
+#
+#   docker compose up --build       # build + run API + Neo4j
+#   docker compose up -d neo4j      # just the database
+#   Backend API : http://localhost:8000   (/health, /docs, /api/chat)
+#   Browser UI  : http://localhost:7474    (no login)
+#   Bolt URI    : bolt://localhost:7687
+#
+# APOC is required by the ingestion path: app/database/neo4j_client.py uses
+# apoc.merge.node to MERGE verifier nodes under a dynamic label
+# (OffTaker vs Cooperative) chosen per row.
+#
+# WARNING: NEO4J_AUTH=none is for LOCAL DEV ONLY. Never expose this publicly.
+
+services:
+  neo4j:
+    image: neo4j:5
+    container_name: verifarms-neo4j
+    ports:
+      - "7474:7474"   # HTTP / Neo4j Browser
+      - "7687:7687"   # Bolt protocol (driver connections)
+    environment:
+      # No authentication for local development.
+      NEO4J_AUTH: "none"
+      # Enable the APOC plugin.
+      NEO4J_PLUGINS: '["apoc"]'
+      # Allow apoc.* procedures/functions used by the loader.
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
+      NEO4J_dbms_security_procedures_allowlist: "apoc.*"
+      # Modest heap for a laptop; tune as needed.
+      NEO4J_server_memory_heap_initial__size: "512m"
+      NEO4J_server_memory_heap_max__size: "1G"
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      # cypher-shell exits 0 once Bolt is accepting queries.
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p neo4j 'RETURN 1' || cypher-shell 'RETURN 1'"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    container_name: verifarms-backend
+    depends_on:
+      neo4j:
+        condition: service_healthy   # wait until Bolt accepts queries
+    environment:
+      # Point the app at the neo4j service (not localhost) on the compose network.
+      NEO4J_URI: "bolt://neo4j:7687"
+      # NEO4J_AUTH=none above → leave the password empty so the driver connects
+      # without credentials (app.database.neo4j_client._auth() returns None).
+      NEO4J_USERNAME: "neo4j"
+      NEO4J_PASSWORD: ""
+      # Agent LLM (Featherless). Pulled from the root .env if present; the app
+      # falls back to the deterministic mock stream when the key is empty.
+      FEATHERLESS_API_KEY: "${FEATHERLESS_API_KEY:-}"
+      FEATHERLESS_BASE_URL: "${FEATHERLESS_BASE_URL:-https://api.featherless.ai/v1}"
+      FEATHERLESS_MODEL: "${FEATHERLESS_MODEL:-Qwen/Qwen3-235B-A22B-Thinking-2507}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}"
+      RELOAD: "false"
+      # API auth + rate limit (applies to all routers: ingest/chat/consent/gold/
+      # match/profiles/investigator/export). Open when unset; set to require a key
+      # via X-API-Key header or ?api_key= (the latter for the SSE/EventSource chat).
+      VERIFARMS_API_KEY: "${VERIFARMS_API_KEY:-}"
+      EXPORT_API_KEY: "${EXPORT_API_KEY:-}"                 # legacy alias for VERIFARMS_API_KEY
+      EXPORT_RATE_LIMIT_PER_MIN: "${EXPORT_RATE_LIMIT_PER_MIN:-120}"
+      EVENT_BACKEND: "${EVENT_BACKEND:-none}"               # none | webhook | redis
+      EVENT_WEBHOOK_URLS: "${EVENT_WEBHOOK_URLS:-}"
+      # Remote MCP gateway (multi-tenant, read-only) mounted at /mcp when enabled.
+      # Set a JWT secret to issue/verify org-scoped Bearer tokens, or MCP_AUTH_DEV
+      # for unsigned local tokens. Disabled → /mcp is not mounted.
+      MCP_REMOTE_ENABLED: "${MCP_REMOTE_ENABLED:-false}"
+      MCP_JWT_SECRET: "${MCP_JWT_SECRET:-}"
+      MCP_AUTH_DEV: "${MCP_AUTH_DEV:-false}"
+      MCP_RATE_LIMIT_PER_MIN: "${MCP_RATE_LIMIT_PER_MIN:-60}"   # per-tenant; 0 disables
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  # One-off seeder (Milestone 1). Not started by `docker compose up` — it lives
+  # behind the "seed" profile and is meant to be run on demand:
+  #   docker compose run --rm loader                  # 1000 farmers, --reset
+  #   docker compose run --rm loader --farmers 200    # override args
+  loader:
+    build:
+      context: ./data-pipeline
+    container_name: verifarms-loader
+    profiles: ["seed"]
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment:
+      NEO4J_URI: "bolt://neo4j:7687"
+      NEO4J_USERNAME: "neo4j"
+      # The loader requires a non-empty password; the no-auth Neo4j ignores its
+      # value, so any placeholder works on the local stack.
+      NEO4J_PASSWORD: "neo4j"
+    restart: "no"
+
+  # One-off seeder for the REIFIED trust layer (Institutions + Claims + conflicts).
+  # Reuses the backend image; lights up the operational copilot tools and the DLQ
+  # Investigator. Run on demand:
+  #   docker compose run --rm reified-seed                  # 60 farmers
+  #   docker compose run --rm reified-seed --farmers 200
+  reified-seed:
+    build:
+      context: ./backend
+    container_name: verifarms-reified-seed
+    profiles: ["seed"]
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment:
+      NEO4J_URI: "bolt://neo4j:7687"
+      NEO4J_USERNAME: "neo4j"
+      NEO4J_PASSWORD: ""        # empty → no-auth connect (matches NEO4J_AUTH=none)
+    # Override the backend's uvicorn CMD with the seeder entrypoint.
+    entrypoint: ["python", "-m", "app.scripts.seed_reified"]
+    command: ["--farmers", "60"]
+    restart: "no"
+
+  # Demo cooperative registry (Phase 1): a real external Postgres for the inbound
+  # connector to pull from. Behind the "connectors"/"demo" profiles. The schema
+  # (cooperative_members) is created on first boot from the mounted init SQL; rows
+  # are seeded idempotently by the coop-seed service below.
+  #   docker compose --profile demo up -d coop-postgres
+  coop-postgres:
+    image: postgres:16-alpine
+    container_name: verifarms-coop-postgres
+    profiles: ["connectors", "demo"]
+    environment:
+      POSTGRES_USER: "verifarms"
+      POSTGRES_PASSWORD: "verifarms"
+      POSTGRES_DB: "coop"
+    ports:
+      - "5433:5432"   # 5433 on the host to avoid clashing with a local Postgres
+    volumes:
+      - coop_pg_data:/var/lib/postgresql/data
+      # First-boot schema. Row data is seeded separately by coop-seed.
+      - ./backend/app/scripts/demo/sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U verifarms -d coop"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # One-off seeder for the demo cooperative Postgres. Reuses the backend image
+  # (sqlalchemy/asyncpg are in its requirements) and the shared roster, so the
+  # rows share the F-0001..F-NNNN id space with the reified seed. Idempotent.
+  #   docker compose --profile demo run --rm coop-seed                 # 60 farmers
+  #   docker compose --profile demo run --rm coop-seed --touch F-0005  # CDC change
+  coop-seed:
+    build:
+      context: ./backend
+    container_name: verifarms-coop-seed
+    profiles: ["connectors", "demo"]
+    depends_on:
+      coop-postgres:
+        condition: service_healthy
+    environment:
+      COOP_PG_DSN: "postgresql+asyncpg://verifarms:verifarms@coop-postgres:5432/coop"
+    entrypoint: ["python", "-m", "app.scripts.demo.seed_cooperative_pg"]
+    command: ["--farmers", "60"]
+    restart: "no"
+
+  # Inbound connector: pull a cooperative Postgres registry into the graph via CDC
+  # (incremental on updated_at, watermark in Neo4j). Behind the "connectors"
+  # profile. Defaults to the demo coop-postgres above; override COOP_PG_DSN to
+  # point at a real external registry. Inert (exits "not configured") only if the
+  # DSN is explicitly blanked — it never fabricates.
+  #   docker compose --profile demo run --rm coop-sync --once
+  coop-sync:
+    build:
+      context: ./backend
+    container_name: verifarms-coop-sync
+    profiles: ["connectors", "demo"]
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      coop-postgres:
+        condition: service_healthy
+    environment:
+      NEO4J_URI: "bolt://neo4j:7687"
+      NEO4J_USERNAME: "neo4j"
+      NEO4J_PASSWORD: ""
+      # Default to the demo source DB; override to target an external registry.
+      COOP_PG_DSN: "${COOP_PG_DSN:-postgresql+asyncpg://verifarms:verifarms@coop-postgres:5432/coop}"
+      COOP_PG_TABLE: "${COOP_PG_TABLE:-cooperative_members}"
+    entrypoint: ["python", "-m", "app.ingestion.connectors.cooperative_sync"]
+    command: ["--once"]
+    restart: "no"
+
+  # Orchestrator (Dagster) — schedules the CDC syncs. Behind the "orchestration"
+  # profile. Reuses the backend image and installs dagster at start (a dev
+  # convenience; production would bake it into a dedicated orchestrator image).
+  #   docker compose --profile orchestration up dagster   # UI at http://localhost:3000
+  dagster:
+    build:
+      context: ./backend
+    container_name: verifarms-dagster
+    profiles: ["orchestration"]
+    user: root
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment:
+      NEO4J_URI: "bolt://neo4j:7687"
+      NEO4J_USERNAME: "neo4j"
+      NEO4J_PASSWORD: ""
+      SECRETS_BACKEND: "${SECRETS_BACKEND:-env}"
+      COOP_PG_DSN: "${COOP_PG_DSN:-}"
+      ALERT_WEBHOOK_URL: "${ALERT_WEBHOOK_URL:-}"
+      DAGSTER_HOME: "/tmp/dagster"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "mkdir -p /tmp/dagster && pip install -q -r app/orchestration/requirements.txt &&
+         dagster dev -h 0.0.0.0 -p 3000 -m app.orchestration.definitions"
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  # Message broker for the IoT/telemetry streaming pipeline (Sprint 2). Behind
+  # the "streaming" profile. Management UI at http://localhost:15672 (guest/guest).
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: verifarms-rabbitmq
+    profiles: ["streaming"]
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  # Telemetry consumer worker — reuses the backend image, installs aio-pika at
+  # start (dev convenience), and drains the queue into the reified graph.
+  telemetry-consumer:
+    build:
+      context: ./backend
+    container_name: verifarms-telemetry-consumer
+    profiles: ["streaming"]
+    user: root
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      NEO4J_URI: "bolt://neo4j:7687"
+      NEO4J_USERNAME: "neo4j"
+      NEO4J_PASSWORD: ""
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+      STREAM_DEDUP_BACKEND: "${STREAM_DEDUP_BACKEND:-memory}"
+      REDIS_URL: "${REDIS_URL:-}"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "pip install -q aio-pika && python -m app.streaming.consumer --max-age 5"
+    restart: unless-stopped
+
+  # One-off telemetry producer (Phase 2 demo). Publishes roster-aligned sensor
+  # readings — including deliberate duplicates and a vendor dialect — onto the
+  # queue the consumer drains. Reuses the backend image + the same ad-hoc aio-pika
+  # install as the consumer.
+  #   docker compose --profile streaming run --rm telemetry-producer --farmers 60
+  telemetry-producer:
+    build:
+      context: ./backend
+    container_name: verifarms-telemetry-producer
+    profiles: ["streaming"]
+    user: root
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "pip install -q aio-pika && python -m app.scripts.demo.publish_telemetry \"$$@\""
+      - "--"
+    command: ["--farmers", "60"]
+    restart: "no"
+
+  # Object store (S3-compatible) for the bulk-spatial pipeline (Phase 3). Behind
+  # the "bulk"/"demo" profiles. S3 API on :9000, web console on :9001 (minio/minio123).
+  minio:
+    image: minio/minio:latest
+    container_name: verifarms-minio
+    profiles: ["bulk", "demo"]
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: "minioadmin"
+      MINIO_ROOT_PASSWORD: "minioadmin"
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # web console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  # One-off: generate roster-aligned parcel GeoJSON and upload it to MinIO.
+  # Reuses the backend image + an ad-hoc boto3 install (kept out of the runtime
+  # image like aio-pika). Behind the "bulk"/"demo" profiles.
+  #   docker compose --profile demo run --rm spatial-seed --farmers 60
+  spatial-seed:
+    build:
+      context: ./backend
+    container_name: verifarms-spatial-seed
+    profiles: ["bulk", "demo"]
+    user: root
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      BULK_S3_ENDPOINT_URL: "http://minio:9000"
+      BULK_S3_BUCKET: "verifarms-bulk"
+      AWS_ACCESS_KEY_ID: "minioadmin"
+      AWS_SECRET_ACCESS_KEY: "minioadmin"
+      AWS_REGION: "us-east-1"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "pip install -q boto3 && python -m app.scripts.demo.seed_spatial_s3 \"$$@\""
+      - "--"
+    command: ["--farmers", "60"]
+    restart: "no"
+
+  # One-off: the S3 connector — fetch the uploaded objects, extract spatial
+  # metadata (bbox + geodesic area), write reified claims + a BulkJobAudit.
+  #   docker compose --profile demo run --rm spatial-process
+  spatial-process:
+    build:
+      context: ./backend
+    container_name: verifarms-spatial-process
+    profiles: ["bulk", "demo"]
+    user: root
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      NEO4J_URI: "bolt://neo4j:7687"
+      NEO4J_USERNAME: "neo4j"
+      NEO4J_PASSWORD: ""
+      BULK_S3_ENDPOINT_URL: "http://minio:9000"
+      BULK_S3_BUCKET: "verifarms-bulk"
+      BULK_S3_PREFIX: "spatial/"
+      AWS_ACCESS_KEY_ID: "minioadmin"
+      AWS_SECRET_ACCESS_KEY: "minioadmin"
+      AWS_REGION: "us-east-1"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "pip install -q boto3 && python -m app.bulk.s3_connector \"$$@\""
+      - "--"
+    command: []
+    restart: "no"
+
+  # Shared Redis (Phase 4): backs the durable telemetry dedup store, the registry-
+  # lookup cache, and event Pub/Sub. Opt-in per consumer via env (see the demo
+  # scripts). Behind the "streaming"/"demo" profiles.
+  redis:
+    image: redis:7-alpine
+    container_name: verifarms-redis
+    profiles: ["streaming", "demo"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  # Stub external credit-bureau / KYC API (Phase 5). Stands in for a licensed
+  # bureau + accredited identity provider that the verification seam calls over
+  # HTTP. Behind the "providers"/"demo" profiles. Console: http://localhost:8001/docs
+  stub-bureau:
+    build:
+      context: ./backend
+    container_name: verifarms-stub-bureau
+    profiles: ["providers", "demo"]
+    environment:
+      RELOAD: "false"
+    entrypoint: ["uvicorn", "app.scripts.demo.stub_bureau:app", "--host", "0.0.0.0", "--port", "8001"]
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 8s
+    restart: unless-stopped
+
+  # One-off: drive the ClaimBridge seam end-to-end. Registers the demo providers,
+  # fetches credit + identity for the roster from stub-bureau, and persists reified
+  # credit_history / identity_verified claims. This is the wiring that makes the
+  # seam actually produce claims at runtime (it shipped no provider by design).
+  #   docker compose --profile demo run --rm enrich-providers --farmers 60
+  enrich-providers:
+    build:
+      context: ./backend
+    container_name: verifarms-enrich-providers
+    profiles: ["providers", "demo"]
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      stub-bureau:
+        condition: service_healthy
+    environment:
+      NEO4J_URI: "bolt://neo4j:7687"
+      NEO4J_USERNAME: "neo4j"
+      NEO4J_PASSWORD: ""
+      # Select the demo providers and point them at the stub bureau. Without these
+      # the factory raises NotConfigured — the system never fabricates on its own.
+      CREDIT_PROVIDER: "demo"
+      CREDIT_API_KEY: "demo-key"
+      CREDIT_BASE_URL: "http://stub-bureau:8001"
+      IDENTITY_PROVIDER: "demo"
+      IDENTITY_API_KEY: "demo-key"
+      IDENTITY_BASE_URL: "http://stub-bureau:8001"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "python -m app.scripts.demo.enrich_via_bridge \"$$@\""
+      - "--"
+    command: ["--farmers", "60"]
+    restart: "no"
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  coop_pg_data:
+  minio_data:
+  redis_data:

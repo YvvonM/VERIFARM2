@@ -1,0 +1,6 @@
+# Bulk/spatial dependencies — heavy, kept OUT of the runtime API image. Install
+# on the worker/cluster that actually runs these jobs.
+#   pip install -r app/bulk/requirements.txt
+pyspark>=3.5          # distributed Bronze→Silver cleaning (spark_job.py)
+boto3>=1.34           # S3 access / object-created event source
+pyarrow>=15.0         # local Parquet reads (non-Spark path)

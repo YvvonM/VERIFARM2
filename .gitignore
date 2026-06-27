@@ -1,0 +1,29 @@
+# Secrets
+.env
+
+# Data pipeline raw inputs (place original Agrovesto/Tegemeo CSVs here)
+data-pipeline/raw/*
+!data-pipeline/raw/.gitkeep
+
+# Dead-Letter Queue output (rejected ingestion records)
+backend/dlq/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+backend/app/verification/airflow-gcp-project-7d4ca4784d69---service key.json
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+backend/.pytest_cache/
+# design-sync build scratch
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules
+frontend/.design-sync-tw.css

@@ -1,0 +1,5 @@
+# Milestone 1 — Data pipeline dependencies (Python 3.11+)
+faker>=24.0
+pandas>=2.1
+neo4j>=5.15
+python-dotenv>=1.0
