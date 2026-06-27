@@ -161,7 +161,7 @@ export default function CooperativeOnboardPage() {
             value={institutionId}
             onChange={(e) => setInstitutionId(e.target.value)}
             placeholder="ORG-TEGEMEO"
-            className="mt-1 w-full rounded-md border border-white/15 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            className="mt-1 w-full rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-primary focus:outline-none"
           />
         </label>
         <label className="block">
@@ -171,7 +171,7 @@ export default function CooperativeOnboardPage() {
             value={institutionName}
             onChange={(e) => setInstitutionName(e.target.value)}
             placeholder="Tegemeo Cereals Enterprises"
-            className="mt-1 w-full rounded-md border border-white/15 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            className="mt-1 w-full rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-primary focus:outline-none"
           />
         </label>
       </div>

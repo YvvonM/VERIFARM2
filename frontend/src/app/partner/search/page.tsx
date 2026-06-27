@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 
 import { PortalNav } from "@/components/nav/PortalNav";
+import { friendlyClaimType } from "@/lib/claimLabels";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY;
@@ -138,9 +139,9 @@ export default function PartnerSearchPage() {
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
       <PortalNav />
-      <h1 className="text-2xl font-semibold text-white">Farmer Search</h1>
+      <h1 className="text-2xl font-semibold text-white">Find Farmers</h1>
       <p className="mt-1 text-sm text-white/60">
-        Find verified farmers eligible for your financial products.
+        Find farmers you can offer loans, inputs, or insurance to.
       </p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -150,7 +151,7 @@ export default function PartnerSearchPage() {
             value={cropType}
             onChange={(e) => setCropType(e.target.value)}
             placeholder="maize"
-            className="mt-1 w-full rounded-md border border-white/15 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            className="mt-1 w-full rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-primary focus:outline-none"
           />
         </label>
         <label className="block">
@@ -159,7 +160,7 @@ export default function PartnerSearchPage() {
             value={region}
             onChange={(e) => setRegion(e.target.value)}
             placeholder="Kirinyaga County"
-            className="mt-1 w-full rounded-md border border-white/15 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            className="mt-1 w-full rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-primary focus:outline-none"
           />
         </label>
         <label className="block">
@@ -171,12 +172,12 @@ export default function PartnerSearchPage() {
             value={minLandHectares}
             onChange={(e) => setMinLandHectares(e.target.value)}
             placeholder="1.0"
-            className="mt-1 w-full rounded-md border border-white/15 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            className="mt-1 w-full rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-primary focus:outline-none"
           />
         </label>
         <label className="block sm:col-span-2">
           <span className="text-sm font-medium text-white/70">
-            Min trust score: {minTrustScore.toFixed(2)}
+            Minimum reliability: {Math.round(minTrustScore * 100)}%
           </span>
           <input
             type="range"
@@ -193,7 +194,7 @@ export default function PartnerSearchPage() {
           <select
             value={productId}
             onChange={(e) => setProductId(e.target.value)}
-            className="mt-1 w-full rounded-md border border-white/15 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            className="mt-1 w-full rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-primary focus:outline-none"
           >
             <option value="">All products</option>
             {products.map((p) => (
@@ -228,8 +229,8 @@ export default function PartnerSearchPage() {
                 <th className="px-3 py-2 font-medium text-white/60">Cooperative</th>
                 <th className="px-3 py-2 font-medium text-white/60">Crops</th>
                 <th className="px-3 py-2 font-medium text-white/60">Verified land (ha)</th>
-                <th className="px-3 py-2 font-medium text-white/60">Trust score</th>
-                <th className="px-3 py-2 font-medium text-white/60">Matched products</th>
+                <th className="px-3 py-2 font-medium text-white/60">How reliable</th>
+                <th className="px-3 py-2 font-medium text-white/60">Loan &amp; Insurance Options</th>
                 <th className="px-3 py-2 font-medium text-white/60" />
               </tr>
             </thead>
@@ -242,7 +243,7 @@ export default function PartnerSearchPage() {
                   <td className="px-3 py-2 text-white/80">
                     {f.verified_land_hectares?.toFixed(2) ?? "—"}
                   </td>
-                  <td className="px-3 py-2 text-white/80">{topTrust(f).toFixed(2)}</td>
+                  <td className="px-3 py-2 text-white/80">{Math.round(topTrust(f) * 100)}%</td>
                   <td className="px-3 py-2 text-white/80">
                     {f.matched_products.filter((p) => p.eligible).map((p) => p.product_id).join(", ") || "—"}
                   </td>
@@ -252,7 +253,7 @@ export default function PartnerSearchPage() {
                       onClick={() => viewProfile(f.farmer_id)}
                       className="rounded-md border border-white/15 px-2 py-1 text-xs font-medium text-white/70 hover:border-primary hover:text-primary"
                     >
-                      View Profile
+                      See Details
                     </button>
                   </td>
                 </tr>
@@ -273,7 +274,7 @@ export default function PartnerSearchPage() {
           >
             <div className="flex items-start justify-between">
               <h2 className="text-lg font-semibold text-white">
-                Verified history — {modalFarmerId}
+                What We Know About {modalFarmerId}
               </h2>
               <button
                 type="button"
@@ -291,20 +292,22 @@ export default function PartnerSearchPage() {
               <div className="mt-4 space-y-4">
                 {Object.entries(modalProfile.verified_history).map(([claimType, claims]) => (
                   <div key={claimType}>
-                    <h3 className="text-sm font-semibold text-white/80">{claimType}</h3>
+                    <h3 className="text-sm font-semibold text-white/80">
+                      {friendlyClaimType(claimType)}
+                    </h3>
                     <ul className="mt-1 space-y-1">
                       {claims.map((c, i) => (
                         <li key={i} className="text-xs text-white/60">
-                          {c.value_numeric ?? "—"} — {c.source_name ?? "unknown source"}
-                          {c.is_authoritative ? " (authoritative)" : ""} — confidence{" "}
-                          {(c.confidence * 100).toFixed(0)}%
+                          {c.value_numeric ?? "—"} — checked by {c.source_name ?? "an unknown source"}
+                          {c.is_authoritative ? " (official source)" : ""} — {(c.confidence * 100).toFixed(0)}%
+                          sure
                         </li>
                       ))}
                     </ul>
                   </div>
                 ))}
                 {Object.keys(modalProfile.verified_history).length === 0 ? (
-                  <p className="text-sm text-white/40">No verified claims yet.</p>
+                  <p className="text-sm text-white/40">Nothing verified about this farmer yet.</p>
                 ) : null}
               </div>
             ) : null}

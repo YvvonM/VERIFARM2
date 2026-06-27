@@ -1,0 +1,9 @@
+INFO:     Started server process [15984]
+INFO:     Waiting for application startup.
+2026-06-27 15:04:48 | INFO     | verifarms.api | VERIFARMS API started. CORS origins: ['http://localhost:3000', 'http://127.0.0.1:3000']
+2026-06-27 15:04:48 | INFO     | app.investigator.worker | DLQ Investigator disabled (set INVESTIGATOR_ENABLED=true to enable).
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:60949 - "GET /health HTTP/1.1" 200 OK
+2026-06-27 15:04:58 | INFO     | app.database.neo4j_client | Connected to Neo4j at neo4j+s://cb7572d4.databases.neo4j.io.
+INFO:     127.0.0.1:60951 - "GET /api/v1/analytics/eligibility-by-product HTTP/1.1" 200 OK

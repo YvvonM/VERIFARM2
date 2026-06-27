@@ -3,9 +3,13 @@
 // Partner Dashboard — landing page for the partner portal. Pulls portfolio
 // numbers from the existing macro consumer endpoint
 // (GET /api/v1/macro/cooperative/{institution_id}/stats) -- no new backend
-// route. The "total cooperatives onboarded" figure is the count of demo
+// route. The "cooperatives connected" figure is the count of demo
 // cooperatives this dashboard is wired to poll (see COOPERATIVE_IDS below);
 // there is no system-wide "all cooperatives" endpoint to sum across yet.
+//
+// Written for non-technical users: no API keys or technical terms shown
+// here. "Reliability" is plain language for what the rest of the codebase
+// calls trust_score.
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -37,9 +41,6 @@ export default function PartnerDashboardPage() {
   const [stats, setStats] = useState<CooperativeStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [apiKeyCopied, setApiKeyCopied] = useState(false);
-
-  const DUMMY_API_KEY = "vf_demo_partner_key_8f3c1a2e9b";
 
   useEffect(() => {
     let cancelled = false;
@@ -73,33 +74,27 @@ export default function PartnerDashboardPage() {
 
   const totalFarmers = stats.reduce((sum, s) => sum + s.total_members, 0);
   const totalCooperatives = stats.length;
-  const avgTrust =
+  const avgReliabilityPct =
     stats.length > 0
-      ? stats.reduce((sum, s) => sum + s.average_trust_score, 0) / stats.length
+      ? Math.round((stats.reduce((sum, s) => sum + s.average_trust_score, 0) / stats.length) * 100)
       : 0;
-
-  const copyApiKey = async () => {
-    await navigator.clipboard.writeText(DUMMY_API_KEY);
-    setApiKeyCopied(true);
-    setTimeout(() => setApiKeyCopied(false), 2000);
-  };
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
       <PortalNav />
-      <h1 className="text-2xl font-semibold text-white">Partner Dashboard</h1>
+      <h1 className="text-2xl font-semibold text-white">Your Farmers, At a Glance</h1>
       <p className="mt-1 text-sm text-white/60">
-        Portfolio overview across the cooperatives you have access to.
+        A quick look at the farmers you can see and reach out to.
       </p>
 
       {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        <StatCard label="Total verified farmers" value={loading ? "…" : String(totalFarmers)} />
-        <StatCard label="Cooperatives onboarded" value={loading ? "…" : String(totalCooperatives)} />
+        <StatCard label="Verified farmers" value={loading ? "…" : String(totalFarmers)} />
+        <StatCard label="Cooperatives connected" value={loading ? "…" : String(totalCooperatives)} />
         <StatCard
-          label="Average trust score"
-          value={loading ? "…" : avgTrust.toFixed(2)}
+          label="How reliable, on average"
+          value={loading ? "…" : `${avgReliabilityPct}%`}
         />
       </div>
 
@@ -108,33 +103,14 @@ export default function PartnerDashboardPage() {
           href="/partner/search"
           className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
         >
-          Search Farmers
+          Find Farmers
         </Link>
         <Link
           href="/partner/download"
           className="rounded-md border border-white/15 px-4 py-2 text-sm font-medium text-white/70"
         >
-          Download Data
+          Get Their Data
         </Link>
-      </div>
-
-      <div className="mt-10 rounded-lg border border-white/10 p-4">
-        <h2 className="text-sm font-semibold text-white/70">Your API Key</h2>
-        <p className="mt-1 text-xs text-white/40">
-          Demo key — static for this walkthrough, not a real credential.
-        </p>
-        <div className="mt-2 flex items-center gap-2">
-          <code className="flex-1 truncate rounded-md bg-white/10 px-3 py-2 text-xs text-white/80">
-            {DUMMY_API_KEY}
-          </code>
-          <button
-            type="button"
-            onClick={copyApiKey}
-            className="rounded-md border border-white/15 px-3 py-2 text-xs font-medium text-white/70 hover:border-primary hover:text-primary"
-          >
-            {apiKeyCopied ? "Copied!" : "Copy"}
-          </button>
-        </div>
       </div>
     </main>
   );
