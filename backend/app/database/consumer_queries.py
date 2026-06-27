@@ -91,13 +91,22 @@ MATCH (inst:Institution {id: $institution_id})
 OPTIONAL MATCH (inst)-[:ATTESTS_TO]->(:Claim)-[:BELONGS_TO]->(f:Farmer)
 WITH inst, collect(DISTINCT f) AS members
 WITH inst, [x IN members WHERE x IS NOT NULL] AS members
+// Average trust score across every institution attesting about this
+// portfolio's farmers (including this institution itself) -- an additive
+// aggregate alongside the existing anonymized member-count metrics below.
+CALL {
+    WITH members
+    UNWIND (CASE WHEN size(members) = 0 THEN [null] ELSE members END) AS m
+    OPTIONAL MATCH (attestor:Institution)-[:ATTESTS_TO]->(:Claim)-[:BELONGS_TO]->(m)
+    RETURN avg(coalesce(attestor.trust_score, 0.0)) AS average_trust_score
+}
 UNWIND (CASE WHEN size(members) = 0 THEN [null] ELSE members END) AS m
 // Best authoritative land figure for this member (NULL if none / no member).
 OPTIONAL MATCH (auth:Institution)-[:ATTESTS_TO]->
               (lc:Claim {claim_type: 'land_size_hectares'})-[:BELONGS_TO]->(m)
     WHERE coalesce(auth.is_authoritative, false)
-WITH inst, m, max(lc.value_numeric) AS verified_ha
-WITH inst, m, verified_ha,
+WITH inst, m, average_trust_score, max(lc.value_numeric) AS verified_ha
+WITH inst, m, average_trust_score, verified_ha,
      (m IS NOT NULL AND EXISTS {
          MATCH (a:Institution)-[:ATTESTS_TO]->(:Claim)-[:BELONGS_TO]->(m)
          WHERE coalesce(a.is_authoritative, false)
@@ -106,7 +115,7 @@ WITH inst, m, verified_ha,
          MATCH (:Institution)-[:ATTESTS_TO]->
                (:Claim {claim_type: 'credit_history'})-[:BELONGS_TO]->(m)
      }) AS has_credit_history
-WITH inst,
+WITH inst, average_trust_score,
      count(m)                                                              AS total_members,
      sum(coalesce(verified_ha, 0.0))                                       AS total_verified_hectares,
      sum(CASE WHEN m IS NOT NULL AND NOT has_authoritative  THEN 1 ELSE 0 END) AS unverified_members,
@@ -116,7 +125,8 @@ RETURN {
     total_members:                total_members,
     total_verified_hectares:      total_verified_hectares,
     unverified_members:           unverified_members,
-    missing_credit_history_count: missing_credit_history_count
+    missing_credit_history_count: missing_credit_history_count,
+    average_trust_score:          round(coalesce(average_trust_score, 0.0), 4)
 } AS stats
 """
 

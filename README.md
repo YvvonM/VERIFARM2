@@ -46,8 +46,10 @@ to the frontend over Server-Sent Events. LangChain drives the LLM/tool layer
 | 2 | Loan Officer Copilot (supervisor + ReAct; LangChain LLM layer + Featherless/Qwen3) | `backend/app/agent/` | ✅ Implemented (mock fallback when no key) |
 | — | Autonomous DLQ Investigator (background data-quality agent) | `backend/app/investigator/`, `backend/app/api/investigator.py` | ✅ Implemented |
 | 3 | Streaming API Layer (SSE) | `backend/app/api/`, `backend/main.py` | ✅ Implemented |
-| 4 | React/Next.js GenUI Interface | `frontend/` | 🟡 Skeleton + copilot chat + cooperative onboarding page (`/cooperative/onboard`); `Insight` GenUI component implemented. No `src/components/ui` Shadcn primitives are actually present yet despite earlier docs implying otherwise — the onboarding page uses plain Tailwind. Not build-verified (no Node.js in this environment). |
+| 4 | React/Next.js GenUI Interface | `frontend/` | ✅ Copilot chat + cooperative onboarding (`/cooperative/onboard`) + partner portal (`/partner`, `/partner/search`, `/partner/download`); `Insight` GenUI component implemented; shared `PortalNav` links all three. `npm run build` passes (compiles, lints, type-checks, prerenders all 6 routes). No `src/components/ui` Shadcn primitives are actually present yet despite earlier docs implying otherwise — every page uses plain Tailwind. |
 | — | `legacy-frontend-prototype/` (formerly `chris frontend/`, renamed to drop the illegal space) | `legacy-frontend-prototype/` | ⬜ Unreferenced Vite/React prototype, kept for reference, not wired into the build |
+| — | MCP server (`verifarms-mcp-server`) — 8 read-only tools over the gold layer | `backend/app/mcp/`, `backend/run_mcp.py` | ✅ Implemented — see "MCP server" section below |
+| — | Partner Portal (dashboard, search, CSV/JSON download) | `frontend/src/app/partner/` | ✅ Implemented |
 | 5 | Open-source docs & demo scripts | this file | 🟡 In progress |
 
 > **Verification note.** The backend modules above compile and were exercised
@@ -633,6 +635,73 @@ no-op), `webhook` (POST to `EVENT_WEBHOOK_URLS`), or `redis` (PUBLISH to a Redis
 Pub/Sub channel). The event payload mirrors the export schema (flat, provenance-
 stamped, a stable `claim_id` for dedupe — no graph internals) and publishing is
 best-effort, so a dead subscriber never fails the ingestion that produced it.
+
+## MCP server — read-only access for external AI systems
+
+`backend/app/mcp/server.py` exposes the verified-claims gold layer to any
+MCP-compatible client (Claude Desktop, an external agent framework, a
+partner's own AI system) over the Model Context Protocol, using
+[`FastMCP`](https://github.com/modelcontextprotocol/python-sdk). It is
+**read-only end to end**: every tool calls an existing read-only function
+(`app.database.match_engine`, `trust_graph`, `profile_queries`,
+`consumer_queries`, `app.api.lender`) — there is no write path, no `CREATE`/
+`MERGE`/`SET`/`DELETE` anywhere a tool can reach.
+
+### Starting it
+
+```bash
+cd backend
+
+# stdio, mock data (no DB needed) — for local agents / Claude Desktop
+python run_mcp.py
+
+# stdio against the live graph (reads NEO4J_URI/USERNAME/PASSWORD/DATABASE
+# from the project-root .env, same as the FastAPI app)
+MCP_BACKEND=neo4j python run_mcp.py
+
+# SSE over HTTP — for a remote AI system / partner integration
+MCP_BACKEND=neo4j MCP_TRANSPORT=sse python run_mcp.py
+```
+
+`MCP_BACKEND` only gates the original three org-level tools (below); the five
+farmer/portfolio/eligibility tools always call `get_driver()` directly and
+therefore always hit the live graph regardless of `MCP_BACKEND`.
+
+### Tools exposed
+
+Org-level (via the injected `GraphReadService`, mock-by-default):
+- `get_verified_claims(org_id)` — every claim an institution attests to.
+- `trace_provenance(claim_id)` — a claim's lineage back to its source system.
+- `check_compliance_status(entity_name)` — an institution's trust tier.
+
+Farmer / portfolio / eligibility (direct `get_driver()` call-through, no new
+Cypher — every query already existed elsewhere in the codebase):
+- `get_eligible_farmers(crop_type, region, min_land_hectares, min_trust_score, product_type)`
+  — calls `app.api.lender._query_eligible_farmers` + `match_engine.evaluate_product`.
+- `get_farmer_verified_history(farmer_id, requesting_institution_id)` — calls
+  `profile_queries.get_verified_history_gated`. **No `GRANTED_ACCESS` grant ⇒
+  `consent_granted: false` and no history data at all** — never an empty-but-
+  present history. The gate is never bypassed.
+- `get_cooperative_portfolio(cooperative_id)` — calls
+  `consumer_queries.get_cooperative_stats`. Anonymized aggregate only.
+- `check_farmer_eligibility(farmer_id, product_id)` — calls
+  `match_engine.farmer_exists` + `evaluate_product` directly; no eligibility
+  logic is duplicated.
+- `get_verification_sources(farmer_id)` — calls
+  `trust_graph.verify_claim` per claim_type the farmer has.
+
+**Non-negotiables enforced on every tool above:** read-only (no write surface
+exists to reach); `farmer_id` and `phone_number` are never both present in a
+single response (`VerifiedHistoryResult`/`EligibleFarmerSummary`/etc. either
+omit `phone_number` entirely or, where the underlying query returns it
+incidentally, the tool strips it before building the response); `gender`/
+`ethnicity` are never queried or returned (consistent with
+`EXCLUDED_FROM_SCORING`); consent denial returns no data, never empty data.
+
+Verified live against the Aura graph during development: a correct
+`requesting_institution_id` returned the farmer's full verified history; an
+arbitrary, non-granted institution id returned `consent_granted: false` with
+`verified_history: null` — the gate held.
 
 ## SSE event contract
 

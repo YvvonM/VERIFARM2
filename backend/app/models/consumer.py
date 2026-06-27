@@ -63,3 +63,8 @@ class CooperativeStatsResponse(BaseModel):
     missing_credit_history_count: int = Field(
         ..., description="Members with no credit_history claim of any kind."
     )
+    average_trust_score: float = Field(
+        default=0.0,
+        description="Mean trust_score across every institution attesting about this "
+        "portfolio's farmers (including this institution itself).",
+    )

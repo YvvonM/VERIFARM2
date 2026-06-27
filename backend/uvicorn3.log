@@ -1,0 +1,11 @@
+INFO:     Started server process [7348]
+INFO:     Waiting for application startup.
+2026-06-27 14:40:30 | INFO     | verifarms.api | VERIFARMS API started. CORS origins: ['http://localhost:3000', 'http://127.0.0.1:3000']
+2026-06-27 14:40:30 | INFO     | app.investigator.worker | DLQ Investigator disabled (set INVESTIGATOR_ENABLED=true to enable).
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:52107 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52109 - "GET /openapi.json HTTP/1.1" 200 OK
+2026-06-27 14:40:52 | INFO     | httpx | HTTP Request: POST https://api.featherless.ai/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:63115 - "POST /api/v1/ai/ask-about-farmer HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62126 - "GET /health HTTP/1.1" 200 OK

@@ -77,3 +77,86 @@ class OrgSummary(BaseModel):
     authoritative: bool = False
     tier: str = "unverified"
     claim_count: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Farmer / portfolio / eligibility tools (direct app.database.* call-through —
+# see app.mcp.server's second tool group). These never carry phone_number or
+# any farmer_id+phone_number pairing, and never carry gender/ethnicity.
+# ---------------------------------------------------------------------------
+
+
+class EligibleFarmerSummary(BaseModel):
+    """One farmer row for the lender-facing eligibility search. No phone_number
+    field exists on this model at all -- farmer_id and phone are never paired."""
+
+    farmer_id: str
+    cooperative_name: Optional[str] = None
+    crop_types: list[str] = Field(default_factory=list)
+    verified_land_hectares: Optional[float] = None
+    trust_score: Optional[float] = Field(
+        default=None, description="Highest attesting institution trust_score backing this farmer's claims."
+    )
+    matched_products: list[str] = Field(
+        default_factory=list, description="product_id values this farmer is currently eligible for."
+    )
+
+
+class EligibleFarmersResult(BaseModel):
+    total: int
+    farmers: list[EligibleFarmerSummary]
+
+
+class VerifiedHistoryResult(BaseModel):
+    """Consent-gated farmer history. ``consent_granted=False`` means NO data was
+    read at all -- this is never populated with an empty/zeroed history."""
+
+    farmer_id: str
+    consent_granted: bool
+    message: str = ""
+    verified_history: Optional[dict] = None
+
+
+class CooperativePortfolio(BaseModel):
+    """Anonymized aggregate only -- no farmer_id, no phone_number, ever."""
+
+    institution_id: str
+    found: bool = True
+    total_members: int = 0
+    total_verified_hectares: float = 0.0
+    unverified_members: int = 0
+    missing_credit_history_count: int = 0
+
+
+class EligibilityRuleOutcome(BaseModel):
+    claim_type: str
+    satisfied: bool
+    required_min: Optional[float] = None
+    required_max: Optional[float] = None
+    required_min_confidence: Optional[float] = None
+    matched_value: Optional[float] = None
+    matched_confidence: Optional[float] = None
+
+
+class FarmerEligibilityResult(BaseModel):
+    farmer_id: str
+    product_id: str
+    farmer_found: bool
+    eligible: bool = False
+    rule_breakdown: list[EligibilityRuleOutcome] = Field(default_factory=list)
+
+
+class VerificationSource(BaseModel):
+    claim_type: str
+    value: Optional[str] = None
+    value_numeric: Optional[float] = None
+    attested_by: Optional[str] = None
+    institution_trust: float = 0.0
+    authoritative: bool = False
+    corroborated: bool = False
+    observed_at: Optional[str] = None
+
+
+class VerificationSourcesResult(BaseModel):
+    farmer_id: str
+    sources: list[VerificationSource] = Field(default_factory=list)

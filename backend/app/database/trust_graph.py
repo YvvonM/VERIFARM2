@@ -68,8 +68,8 @@ WHERE coalesce(inst.trust_score, 0.0) >= $min_trust_score
   // structurally absent from this traversal -- this WHERE is the second,
   // belt-and-suspenders enforcement of that rule.
   AND c.source_category IN $approved_source_categories
-OPTIONAL MATCH (c)-[:CORROBORATED_BY]->(:Claim)
-WITH c, inst, count(*) > 0 AS corroborated
+OPTIONAL MATCH (c)-[:CORROBORATED_BY]->(other:Claim)
+WITH c, inst, count(other) > 0 AS corroborated
 RETURN c.claim_type                            AS claim_type,
        c.value_string                          AS value,
        c.value_numeric                         AS value_numeric,

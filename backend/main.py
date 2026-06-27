@@ -39,6 +39,8 @@ from app.api.onboarding import router as onboarding_router
 from app.api.translate import router as translate_router
 from app.api.cooperative import router as cooperative_router
 from app.api.lender import router as lender_router
+from app.api.ai_chat import router as ai_chat_router
+from app.api.analytics import router as analytics_router
 
 # ---------------------------------------------------------------------------
 # Structured logging.
@@ -122,6 +124,8 @@ app.include_router(investigator_router)
 app.include_router(export_router)
 app.include_router(cooperative_router)
 app.include_router(lender_router)
+app.include_router(ai_chat_router)
+app.include_router(analytics_router)
 
 if MCP_REMOTE_ENABLED:
     # /mcp = Bearer auth gate → FastMCP streamable-HTTP (multi-tenant, read-only).

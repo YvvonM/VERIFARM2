@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from neo4j import Driver
 from pydantic import BaseModel, Field
@@ -20,7 +20,7 @@ from app.api.security import rate_limit, require_api_key
 from app.database import match_engine
 from app.database.neo4j_client import DEFAULT_DATABASE, get_shared_driver
 from app.database.trust_graph import APPROVED_SOURCE_CATEGORIES
-from app.services.product_catalog import list_products
+from app.services.product_catalog import get_product, list_products
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +143,9 @@ async def get_eligible_farmers(
     crop_type: Optional[str] = Query(default=None),
     region: Optional[str] = Query(default=None),
     min_land_hectares: Optional[float] = Query(default=None, ge=0.0),
+    product_id: Optional[str] = Query(
+        default=None, description="Narrow matched_products to one catalog product id."
+    ),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     driver: Driver = Depends(get_shared_driver),
@@ -160,7 +163,13 @@ async def get_eligible_farmers(
         driver, min_trust_score, crop_type, region, min_land_hectares, skip, page_size,
     )
 
-    products = list_products()
+    if product_id:
+        try:
+            products = [get_product(product_id)]
+        except KeyError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    else:
+        products = list_products()
     farmers: list[EligibleFarmer] = []
     for row in rows:
         matched: list[MatchedProductSummary] = []

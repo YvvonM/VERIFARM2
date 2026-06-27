@@ -11,6 +11,8 @@
 
 import { useMemo, useState } from "react";
 
+import { PortalNav } from "@/components/nav/PortalNav";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY;
 
@@ -143,8 +145,9 @@ export default function CooperativeOnboardPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-gray-900">Cooperative Onboarding</h1>
-      <p className="mt-1 text-sm text-gray-600">
+      <PortalNav />
+      <h1 className="text-2xl font-semibold text-white">Cooperative Onboarding</h1>
+      <p className="mt-1 text-sm text-white/60">
         Upload your member records (CSV). Each row becomes a verified, cooperative-attested
         claim — your farmers become eligible for lender review immediately, with no separate
         self-verification step.
@@ -152,62 +155,62 @@ export default function CooperativeOnboardPage() {
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <label className="block">
-          <span className="text-sm font-medium text-gray-700">Cooperative ID</span>
+          <span className="text-sm font-medium text-white/70">Cooperative ID</span>
           <input
             type="text"
             value={institutionId}
             onChange={(e) => setInstitutionId(e.target.value)}
             placeholder="ORG-TEGEMEO"
-            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-green-600 focus:outline-none"
+            className="mt-1 w-full rounded-md border border-white/15 px-3 py-2 text-sm focus:border-primary focus:outline-none"
           />
         </label>
         <label className="block">
-          <span className="text-sm font-medium text-gray-700">Cooperative Name</span>
+          <span className="text-sm font-medium text-white/70">Cooperative Name</span>
           <input
             type="text"
             value={institutionName}
             onChange={(e) => setInstitutionName(e.target.value)}
             placeholder="Tegemeo Cereals Enterprises"
-            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-green-600 focus:outline-none"
+            className="mt-1 w-full rounded-md border border-white/15 px-3 py-2 text-sm focus:border-primary focus:outline-none"
           />
         </label>
       </div>
 
       <div className="mt-6">
-        <span className="text-sm font-medium text-gray-700">Member CSV</span>
-        <p className="mt-1 text-xs text-gray-500">
+        <span className="text-sm font-medium text-white/70">Member CSV</span>
+        <p className="mt-1 text-xs text-white/40">
           Columns: farmer_id, phone_number, land_size_hectares, production_volume_kg, crop_type
         </p>
         <input
           type="file"
           accept=".csv,text/csv"
           onChange={onFileChange}
-          className="mt-2 block text-sm text-gray-700"
+          className="mt-2 block text-sm text-white/70"
         />
-        {fileName ? <p className="mt-1 text-xs text-gray-500">{fileName} — {rows.length} row(s) parsed.</p> : null}
+        {fileName ? <p className="mt-1 text-xs text-white/40">{fileName} — {rows.length} row(s) parsed.</p> : null}
       </div>
 
       {preview.length > 0 ? (
-        <div className="mt-6 overflow-x-auto rounded-md border border-gray-200">
+        <div className="mt-6 overflow-x-auto rounded-md border border-white/10">
           <table className="w-full text-left text-sm">
-            <thead className="bg-gray-50">
+            <thead className="bg-white/5">
               <tr>
                 {Object.keys(preview[0]).map((col) => (
-                  <th key={col} className="px-3 py-2 font-medium text-gray-600">{col}</th>
+                  <th key={col} className="px-3 py-2 font-medium text-white/60">{col}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {preview.map((row, i) => (
-                <tr key={i} className="border-t border-gray-100">
+                <tr key={i} className="border-t border-white/10">
                   {Object.values(row).map((val, j) => (
-                    <td key={j} className="px-3 py-2 text-gray-800">{String(val)}</td>
+                    <td key={j} className="px-3 py-2 text-white/80">{String(val)}</td>
                   ))}
                 </tr>
               ))}
             </tbody>
           </table>
-          <p className="border-t border-gray-100 px-3 py-2 text-xs text-gray-500">
+          <p className="border-t border-white/10 px-3 py-2 text-xs text-white/40">
             Showing first {preview.length} of {rows.length} row(s).
           </p>
         </div>
@@ -217,17 +220,17 @@ export default function CooperativeOnboardPage() {
         type="button"
         onClick={onSubmit}
         disabled={submitting || rows.length === 0}
-        className="mt-6 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        className="mt-6 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
       >
         {submitting ? "Submitting…" : "Submit to VeriFarm"}
       </button>
 
-      {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
 
       {summary ? (
-        <div className="mt-6 rounded-lg border-l-4 border-green-600 bg-green-50 p-4">
-          <h2 className="text-base font-semibold text-green-900">Onboarding complete</h2>
-          <ul className="mt-2 space-y-1 text-sm text-green-900">
+        <div className="mt-6 rounded-lg border-l-4 border-primary bg-primary/10 p-4">
+          <h2 className="text-base font-semibold text-primary">Onboarding complete</h2>
+          <ul className="mt-2 space-y-1 text-sm text-primary">
             <li>Members submitted: {summary.members_submitted}</li>
             <li>Members ingested: {summary.members_ingested}</li>
             <li>Members needing more data (sent to DLQ): {summary.members_dlq}</li>
