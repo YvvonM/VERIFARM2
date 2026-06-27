@@ -20,13 +20,29 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 from neo4j import Driver, GraphDatabase
 
+# Load .env from the project root regardless of caller import order or cwd --
+# this module is imported transitively by almost every router, and some
+# callers (e.g. app.scripts.seed_reified) only call load_dotenv() inside
+# main(), which would run AFTER this module's top-level os.environ reads
+# without this explicit, early load.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().parents[3] / ".env")
+except ImportError:  # pragma: no cover - python-dotenv is a real dependency, but stay safe.
+    pass
+
 logger = logging.getLogger(__name__)
 
-DEFAULT_DATABASE = "neo4j"
+# Was hardcoded to "neo4j" -- ignored NEO4J_DATABASE entirely, so a non-default
+# database name (e.g. a renamed Aura database) was silently never honored by
+# any of the many functions across this codebase that default to this constant.
+DEFAULT_DATABASE = os.environ.get("NEO4J_DATABASE", "neo4j")
 DEFAULT_BATCH_SIZE = 500
 
 

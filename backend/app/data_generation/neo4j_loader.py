@@ -131,8 +131,9 @@ def _reset_owned_data(session) -> None:
 
 def load_to_neo4j(dataset: FakeDataset, reset: bool = False) -> None:
     driver = _get_driver()
+    database = os.environ.get("NEO4J_DATABASE", "neo4j")
     try:
-        with driver.session() as session:
+        with driver.session(database=database) as session:
             _ensure_constraints(session)
 
             if reset:
